@@ -36,6 +36,9 @@ class CountryCodeAdapter extends RecyclerView.Adapter<CountryCodeAdapter.Country
     RelativeLayout rlQueryHolder;
     ImageView imgClearQuery;
     int preferredCountriesCount = 0;
+    private CountryQueryPredicate predicateStartsWithPlus = new PredicateNumberStartWithPlus();
+    private CountryQueryPredicate predicateWithNumber = new PredicateNumber();
+    private CountryQueryPredicate predicateWithName = new PredicateName();
 
     CountryCodeAdapter(Context context, List<CCPCountry> countries, CountryCodePicker codePicker, RelativeLayout rlQueryHolder, final EditText editText_search, TextView textView_noResult, Dialog dialog, ImageView imgClearQuery) {
         this.context = context;
@@ -47,7 +50,7 @@ class CountryCodeAdapter extends RecyclerView.Adapter<CountryCodeAdapter.Country
         this.rlQueryHolder = rlQueryHolder;
         this.imgClearQuery = imgClearQuery;
         this.inflater = LayoutInflater.from(context);
-        this.filteredCountries = getFilteredCountries("");
+        this.filteredCountries = getFilteredCountries("", predicateWithName);
         setSearchBar();
     }
 
@@ -122,26 +125,25 @@ class CountryCodeAdapter extends RecyclerView.Adapter<CountryCodeAdapter.Country
 
         textView_noResult.setVisibility(View.GONE);
         query = query.toLowerCase();
-
-        //if query started from "+" ignore it
-        if (query.length() > 0 && query.charAt(0) == '+') {
-            query = query.substring(1);
+        if (query.startsWith("+")) {
+            filteredCountries = getFilteredCountries(query.substring(1), predicateStartsWithPlus);
+        } else if (query.matches("[0-9]+")) {
+            filteredCountries = getFilteredCountries(query, predicateWithNumber);
+        } else {
+            filteredCountries = getFilteredCountries(query, predicateWithName);
         }
-
-        filteredCountries = getFilteredCountries(query);
-
         if (filteredCountries.size() == 0) {
             textView_noResult.setVisibility(View.VISIBLE);
         }
         notifyDataSetChanged();
     }
 
-    private List<CCPCountry> getFilteredCountries(String query) {
+    private List<CCPCountry> getFilteredCountries(String query, CountryQueryPredicate countryQueryPredicate) {
         List<CCPCountry> tempCCPCountryList = new ArrayList<CCPCountry>();
         preferredCountriesCount = 0;
         if (codePicker.preferredCountries != null && codePicker.preferredCountries.size() > 0) {
             for (CCPCountry CCPCountry : codePicker.preferredCountries) {
-                if (CCPCountry.isEligibleForQuery(query)) {
+                if (countryQueryPredicate.test(CCPCountry, query)) {
                     tempCCPCountryList.add(CCPCountry);
                     preferredCountriesCount++;
                 }
@@ -155,10 +157,12 @@ class CountryCodeAdapter extends RecyclerView.Adapter<CountryCodeAdapter.Country
         }
 
         for (CCPCountry CCPCountry : masterCountries) {
-            if (CCPCountry.isEligibleForQuery(query)) {
+            if (countryQueryPredicate.test(CCPCountry, query)) {
                 tempCCPCountryList.add(CCPCountry);
+                preferredCountriesCount++;
             }
         }
+
         return tempCCPCountryList;
     }
 
@@ -219,10 +223,10 @@ class CountryCodeAdapter extends RecyclerView.Adapter<CountryCodeAdapter.Country
         public CountryCodeViewHolder(View itemView) {
             super(itemView);
             relativeLayout_main = (RelativeLayout) itemView;
-            textView_name = (TextView) relativeLayout_main.findViewById(R.id.textView_countryName);
-            textView_code = (TextView) relativeLayout_main.findViewById(R.id.textView_code);
-            imageViewFlag = (ImageView) relativeLayout_main.findViewById(R.id.image_flag);
-            linearFlagHolder = (LinearLayout) relativeLayout_main.findViewById(R.id.linear_flag_holder);
+            textView_name = relativeLayout_main.findViewById(R.id.textView_countryName);
+            textView_code = relativeLayout_main.findViewById(R.id.textView_code);
+            imageViewFlag = relativeLayout_main.findViewById(R.id.image_flag);
+            linearFlagHolder = relativeLayout_main.findViewById(R.id.linear_flag_holder);
             divider = relativeLayout_main.findViewById(R.id.preferenceDivider);
 
             if (codePicker.getDialogTextColor() != 0) {
@@ -289,6 +293,31 @@ class CountryCodeAdapter extends RecyclerView.Adapter<CountryCodeAdapter.Country
 
         public RelativeLayout getMainView() {
             return relativeLayout_main;
+        }
+    }
+
+    private interface CountryQueryPredicate {
+        Boolean test(CCPCountry ccpCountry, String query);
+    }
+
+    private class PredicateNumberStartWithPlus implements CountryQueryPredicate {
+        @Override
+        public Boolean test(CCPCountry ccpCountry, String query) {
+            return ccpCountry.phoneCode.startsWith(query);
+        }
+    }
+
+    private class PredicateNumber implements CountryQueryPredicate {
+        @Override
+        public Boolean test(CCPCountry ccpCountry, String query) {
+            return ccpCountry.phoneCode.contains(query);
+        }
+    }
+
+    private class PredicateName implements CountryQueryPredicate {
+        @Override
+        public Boolean test(CCPCountry ccpCountry, String query) {
+            return ccpCountry.isEligibleForQuery(query);
         }
     }
 }
